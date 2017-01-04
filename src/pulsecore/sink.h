@@ -248,6 +248,11 @@ struct pa_sink {
      * main thread. */
     int (*update_rate)(pa_sink *s, uint32_t rate);
 
+    /* Called for manual combine sink change. Must not be NULL for a combine
+     * sink. Can be NULL for all other sink types. */
+    int (*combine_add_output)(pa_sink *combine_sink, pa_sink *slave_sink);
+    int (*combine_del_output)(pa_sink *combine_sink, pa_sink *slave_sink);
+
     /* Contains copies of the above data so that the real-time worker
      * thread can work without access locking */
     struct {
@@ -527,6 +532,9 @@ pa_usec_t pa_sink_get_latency_within_thread(pa_sink *s);
  * extra stuff that pa_sink_set_volume() does. This function simply sets
  * s->reference_volume and fires change notifications. */
 void pa_sink_set_reference_volume_direct(pa_sink *s, const pa_cvolume *volume);
+
+int pa_sink_combine_add_output(pa_sink *combine_sink, pa_sink *slave_sink);
+int pa_sink_combine_del_output(pa_sink *combine_sink, pa_sink *slave_sink);
 
 /* Verify that we called in IO context (aka 'thread context), or that
  * the sink is not yet set up, i.e. the thread not set up yet. See

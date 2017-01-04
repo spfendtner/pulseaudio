@@ -3835,3 +3835,35 @@ void pa_sink_set_reference_volume_direct(pa_sink *s, const pa_cvolume *volume) {
     pa_subscription_post(s->core, PA_SUBSCRIPTION_EVENT_SINK|PA_SUBSCRIPTION_EVENT_CHANGE, s->index);
     pa_hook_fire(&s->core->hooks[PA_CORE_HOOK_SINK_VOLUME_CHANGED], s);
 }
+
+int pa_sink_combine_add_output(pa_sink *combine_sink, pa_sink *slave_sink) {
+    int r;
+
+    pa_assert_ctl_context();
+    pa_assert(combine_sink);
+    pa_assert(slave_sink);
+
+    if (combine_sink->combine_add_output != NULL) {
+        r = combine_sink->combine_add_output(combine_sink, slave_sink);
+        return r;
+    } else {
+        return -1;
+    }
+
+    return 0;
+}
+
+int pa_sink_combine_del_output(pa_sink *combine_sink, pa_sink *slave_sink) {
+    int r;
+
+    pa_assert_ctl_context();
+    pa_assert(combine_sink);
+    pa_assert(slave_sink);
+
+    if (combine_sink->combine_del_output != NULL) {
+        r = combine_sink->combine_del_output(combine_sink, slave_sink);
+        return r;
+    } else {
+        return -1;
+    }
+}

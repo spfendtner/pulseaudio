@@ -1249,6 +1249,95 @@ static pa_hook_result_t sink_state_changed_hook_cb(pa_core *c, pa_sink *s, struc
     return PA_HOOK_OK;
 }
 
+void update_slaves_prop(pa_sink *combine_sink, struct userdata *u) {
+
+    uint32_t idx;
+    char *t;
+    bool first = true;
+    struct output *o;
+    pa_proplist *pl;
+
+    PA_IDXSET_FOREACH(o, u->outputs, idx) {
+        char *e;
+        if (first) {
+            e = pa_sprintf_malloc("%s", pa_strnull(o->sink->name));
+            first = false;
+        } else {
+            e = pa_sprintf_malloc("%s, %s", t, pa_strnull(o->sink->name));
+            pa_xfree(t);
+        }
+        t = e;
+    }
+    /* if still first we have no outputs in the list */
+    if (first) {
+        t = pa_sprintf_malloc("");
+    }
+
+    pl = pa_proplist_new();
+    pa_proplist_setf(pl, "combine.slaves", t);
+    pa_xfree(t);
+    pa_sink_update_proplist(combine_sink, PA_UPDATE_REPLACE, pl);
+    pa_proplist_free(pl);
+}
+
+/* Called from main context on native API call */
+static int add_output(pa_sink *combine_sink, pa_sink *slave_sink) {
+    struct userdata *u;
+    struct output *o;
+
+    pa_sink_assert_ref(combine_sink);
+    pa_sink_assert_ref(slave_sink);
+    pa_assert_se(u = combine_sink->userdata);
+
+    if (u->automatic) {
+        pa_log("combine sink is automatic, cannot add: '%s'.", slave_sink->name);
+        return -2;
+    }
+
+    if ((o = find_output(u, slave_sink))) {
+        pa_log("Sink already on combine sink: '%s'.", slave_sink->name);
+        return -3;
+    }
+
+    if (!(o = output_new(u, slave_sink))) {
+        pa_log("Failed to add sink to combine sink: '%s'.", slave_sink->name);
+        return -4;
+    }
+    output_verify(o);
+    update_slaves_prop(combine_sink, u);
+
+    pa_log("Add output sink");
+    return 0;
+}
+
+/* Called from main context on native API call */
+static int del_output(pa_sink *combine_sink, pa_sink *slave_sink) {
+    struct userdata *u;
+    struct output *o;
+
+    pa_sink_assert_ref(combine_sink);
+    pa_sink_assert_ref(slave_sink);
+    pa_assert_se(u = combine_sink->userdata);
+
+    if (u->automatic) {
+        pa_log("combine sink is automatic, cannot del: '%s'.", slave_sink->name);
+        return -2;
+    }
+
+    if (!(o = find_output(u, slave_sink))) {
+        pa_log("Could not remove %s from combine sink, output was not found",
+            slave_sink->name);
+        return -3;
+    }
+
+    pa_idxset_remove_by_data(u->outputs, o, NULL);
+    output_free(o);
+    update_description(u);
+    update_slaves_prop(combine_sink, u);
+    pa_log("Del output sink");
+    return 0;
+}
+
 int pa__init(pa_module*m) {
     struct userdata *u;
     pa_modargs *ma = NULL;
@@ -1401,6 +1490,9 @@ int pa__init(pa_module*m) {
     u->sink->set_state = sink_set_state;
     u->sink->update_requested_latency = sink_update_requested_latency;
     u->sink->userdata = u;
+    u->sink->module = m;
+    u->sink->combine_add_output = add_output;
+    u->sink->combine_del_output = del_output;
 
     pa_sink_set_rtpoll(u->sink, u->rtpoll);
     pa_sink_set_asyncmsgq(u->sink, u->thread_mq.inq);

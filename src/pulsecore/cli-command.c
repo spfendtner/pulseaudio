@@ -135,6 +135,8 @@ static int pa_cli_command_sink_port(pa_core *c, pa_tokenizer *t, pa_strbuf *buf,
 static int pa_cli_command_source_port(pa_core *c, pa_tokenizer *t, pa_strbuf *buf, bool *fail);
 static int pa_cli_command_port_offset(pa_core *c, pa_tokenizer *t, pa_strbuf *buf, bool *fail);
 static int pa_cli_command_dump_volumes(pa_core *c, pa_tokenizer *t, pa_strbuf *buf, bool *fail);
+static int pa_cli_command_combine_sink_add_output(pa_core *c, pa_tokenizer *t, pa_strbuf *buf, bool *fail);
+static int pa_cli_command_combine_sink_del_output(pa_core *c, pa_tokenizer *t, pa_strbuf *buf, bool *fail);
 
 /* A method table for all available commands */
 
@@ -191,6 +193,8 @@ static const struct command commands[] = {
     { "set-log-meta",            pa_cli_command_log_meta,           "Show source code location in log messages (args: bool)", 2},
     { "set-log-time",            pa_cli_command_log_time,           "Show timestamps in log messages (args: bool)", 2},
     { "set-log-backtrace",       pa_cli_command_log_backtrace,      "Show backtrace in log messages (args: frames)", 2},
+    { "combine-sink-add-output", pa_cli_command_combine_sink_add_output, "Add a output sink to the specified combine sink (args: ?, ?", 3},
+    { "combine-sink-del-output", pa_cli_command_combine_sink_del_output, "Delete a output sink from the specified combine sink (args: ?, ?", 3},
     { "play-file",               pa_cli_command_play_file,          "Play a sound file (args: filename, sink|index)", 3},
     { "dump",                    pa_cli_command_dump,               "Dump daemon configuration", 1},
     { "dump-volumes",            pa_cli_command_dump_volumes,       "Debug: Show the state of all volumes", 1 },
@@ -1987,6 +1991,80 @@ static int pa_cli_command_dump_volumes(pa_core *c, pa_tokenizer *t, pa_strbuf *b
                                                         true));
             pa_strbuf_printf(buf, "save = %s\n", pa_yes_no(o->save_volume));
         }
+    }
+
+    return 0;
+}
+
+int pa_cli_command_combine_sink_add_output(pa_core *c, pa_tokenizer *t, pa_strbuf *buf, bool *fail) {
+    const char *cs, *os;
+    pa_sink *combine_sink, *out_sink;
+
+    pa_core_assert_ref(c);
+    pa_assert(t);
+    pa_assert(buf);
+    pa_assert(fail);
+
+    if (!(cs = pa_tokenizer_get(t, 1))) {
+        pa_strbuf_puts(buf, "You need to specify a combine sink either by its name or its index.\n");
+        return -1;
+    }
+
+    if (!(os = pa_tokenizer_get(t, 2))) {
+        pa_strbuf_puts(buf, "You need to specify an output sink either by its name or its index.\n");
+        return -1;
+    }
+
+    if (!(combine_sink = pa_namereg_get(c, cs, PA_NAMEREG_SINK))) {
+        pa_strbuf_puts(buf, "No combine sink found by this name or index.\n");
+        return -1;
+    }
+
+    if (!(out_sink = pa_namereg_get(c, os, PA_NAMEREG_SINK))) {
+        pa_strbuf_puts(buf, "No output sink found by this name or index.\n");
+        return -1;
+    }
+
+    if (pa_sink_combine_add_output(combine_sink, out_sink) < 0) {
+        pa_strbuf_puts(buf, "Add to combine sink failed!\n");
+        return -1;
+    }
+
+    return 0;
+}
+
+int pa_cli_command_combine_sink_del_output(pa_core *c, pa_tokenizer *t, pa_strbuf *buf, bool *fail) {
+    const char *cs, *os;
+    pa_sink *combine_sink, *out_sink;
+
+    pa_core_assert_ref(c);
+    pa_assert(t);
+    pa_assert(buf);
+    pa_assert(fail);
+
+    if (!(cs = pa_tokenizer_get(t, 1))) {
+        pa_strbuf_puts(buf, "You need to specify a combine sink either by its name or its index.\n");
+        return -1;
+    }
+
+    if (!(os = pa_tokenizer_get(t, 2))) {
+        pa_strbuf_puts(buf, "You need to specify an output sink either by its name or its index.\n");
+        return -1;
+    }
+
+    if (!(combine_sink = pa_namereg_get(c, cs, PA_NAMEREG_SINK))) {
+        pa_strbuf_puts(buf, "No combine sink found by this name or index.\n");
+        return -1;
+    }
+
+    if (!(out_sink = pa_namereg_get(c, os, PA_NAMEREG_SINK))) {
+        pa_strbuf_puts(buf, "No output sink found by this name or index.\n");
+        return -1;
+    }
+
+    if (pa_sink_combine_del_output(combine_sink, out_sink) < 0) {
+        pa_strbuf_puts(buf, "Delete from combine sink failed!\n");
+        return -1;
     }
 
     return 0;
