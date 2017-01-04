@@ -591,16 +591,16 @@ void pa_source_output_unlink(pa_source_output*o) {
 
     reset_callbacks(o);
 
-    if (linked) {
-        pa_subscription_post(o->core, PA_SUBSCRIPTION_EVENT_SOURCE_OUTPUT|PA_SUBSCRIPTION_EVENT_REMOVE, o->index);
-        pa_hook_fire(&o->core->hooks[PA_CORE_HOOK_SOURCE_OUTPUT_UNLINK_POST], o);
-    }
-
     if (o->source) {
         if (PA_SOURCE_IS_LINKED(pa_source_get_state(o->source)))
             pa_source_update_status(o->source);
 
         o->source = NULL;
+    }
+
+    if (linked) {
+        pa_subscription_post(o->core, PA_SUBSCRIPTION_EVENT_SOURCE_OUTPUT|PA_SUBSCRIPTION_EVENT_REMOVE, o->index);
+        pa_hook_fire(&o->core->hooks[PA_CORE_HOOK_SOURCE_OUTPUT_UNLINK_POST], o);
     }
 
     pa_core_maybe_vacuum(o->core);
@@ -1751,6 +1751,30 @@ int pa_source_output_update_rate(pa_source_output *o) {
     pa_log_debug("Updated resampler for source output %d", o->index);
 
     return 0;
+}
+
+/* Called from the IO thread. */
+void pa_source_output_attach(pa_source_output *o) {
+    pa_assert(o);
+    pa_assert(!o->thread_info.attached);
+
+    o->thread_info.attached = true;
+
+    if (o->attach)
+        o->attach(o);
+}
+
+/* Called from the IO thread. */
+void pa_source_output_detach(pa_source_output *o) {
+    pa_assert(o);
+
+    if (!o->thread_info.attached)
+        return;
+
+    o->thread_info.attached = false;
+
+    if (o->detach)
+        o->detach(o);
 }
 
 /* Called from the main thread. */

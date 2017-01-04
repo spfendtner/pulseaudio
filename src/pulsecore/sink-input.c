@@ -697,16 +697,16 @@ void pa_sink_input_unlink(pa_sink_input *i) {
 
     reset_callbacks(i);
 
-    if (linked) {
-        pa_subscription_post(i->core, PA_SUBSCRIPTION_EVENT_SINK_INPUT|PA_SUBSCRIPTION_EVENT_REMOVE, i->index);
-        pa_hook_fire(&i->core->hooks[PA_CORE_HOOK_SINK_INPUT_UNLINK_POST], i);
-    }
-
     if (i->sink) {
         if (PA_SINK_IS_LINKED(pa_sink_get_state(i->sink)))
             pa_sink_update_status(i->sink);
 
         i->sink = NULL;
+    }
+
+    if (linked) {
+        pa_subscription_post(i->core, PA_SUBSCRIPTION_EVENT_SINK_INPUT|PA_SUBSCRIPTION_EVENT_REMOVE, i->index);
+        pa_hook_fire(&i->core->hooks[PA_CORE_HOOK_SINK_INPUT_UNLINK_POST], i);
     }
 
     pa_core_maybe_vacuum(i->core);
@@ -2296,6 +2296,30 @@ int pa_sink_input_update_rate(pa_sink_input *i) {
     pa_log_debug("Updated resampler for sink input %d", i->index);
 
     return 0;
+}
+
+/* Called from the IO thread. */
+void pa_sink_input_attach(pa_sink_input *i) {
+    pa_assert(i);
+    pa_assert(!i->thread_info.attached);
+
+    i->thread_info.attached = true;
+
+    if (i->attach)
+        i->attach(i);
+}
+
+/* Called from the IO thread. */
+void pa_sink_input_detach(pa_sink_input *i) {
+    pa_assert(i);
+
+    if (!i->thread_info.attached)
+        return;
+
+    i->thread_info.attached = false;
+
+    if (i->detach)
+        i->detach(i);
 }
 
 /* Called from the main thread. */

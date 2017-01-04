@@ -2381,7 +2381,7 @@ unsigned pa_sink_used_by(pa_sink *s) {
 }
 
 /* Called from main thread */
-unsigned pa_sink_check_suspend(pa_sink *s) {
+unsigned pa_sink_check_suspend(pa_sink *s, pa_sink_input *ignore_input, pa_source_output *ignore_output) {
     unsigned ret;
     pa_sink_input *i;
     uint32_t idx;
@@ -2396,6 +2396,9 @@ unsigned pa_sink_check_suspend(pa_sink *s) {
 
     PA_IDXSET_FOREACH(i, s->inputs, idx) {
         pa_sink_input_state_t st;
+
+        if (i == ignore_input)
+            continue;
 
         st = pa_sink_input_get_state(i);
 
@@ -2417,7 +2420,7 @@ unsigned pa_sink_check_suspend(pa_sink *s) {
     }
 
     if (s->monitor_source)
-        ret += pa_source_check_suspend(s->monitor_source);
+        ret += pa_source_check_suspend(s->monitor_source, ignore_output);
 
     return ret;
 }
@@ -2487,11 +2490,7 @@ int pa_sink_process_msg(pa_msgobject *o, int code, void *userdata, int64_t offse
                 i->thread_info.sync_next->thread_info.sync_prev = i;
             }
 
-            pa_assert(!i->thread_info.attached);
-            i->thread_info.attached = true;
-
-            if (i->attach)
-                i->attach(i);
+            pa_sink_input_attach(i);
 
             pa_sink_input_set_state_within_thread(i, i->state);
 
@@ -2533,13 +2532,9 @@ int pa_sink_process_msg(pa_msgobject *o, int code, void *userdata, int64_t offse
              * sink input handling a few lines down at
              * PA_SINK_MESSAGE_START_MOVE, too. */
 
-            if (i->detach)
-                i->detach(i);
+            pa_sink_input_detach(i);
 
             pa_sink_input_set_state_within_thread(i, i->state);
-
-            pa_assert(i->thread_info.attached);
-            i->thread_info.attached = false;
 
             /* Since the caller sleeps in pa_sink_input_unlink(),
              * we can safely access data outside of thread_info even
@@ -2632,11 +2627,7 @@ int pa_sink_process_msg(pa_msgobject *o, int code, void *userdata, int64_t offse
                 }
             }
 
-            if (i->detach)
-                i->detach(i);
-
-            pa_assert(i->thread_info.attached);
-            i->thread_info.attached = false;
+            pa_sink_input_detach(i);
 
             /* Let's remove the sink input ...*/
             pa_hashmap_remove_and_free(s->thread_info.inputs, PA_UINT32_TO_PTR(i->index));
@@ -2662,11 +2653,7 @@ int pa_sink_process_msg(pa_msgobject *o, int code, void *userdata, int64_t offse
 
             pa_hashmap_put(s->thread_info.inputs, PA_UINT32_TO_PTR(i->index), pa_sink_input_ref(i));
 
-            pa_assert(!i->thread_info.attached);
-            i->thread_info.attached = true;
-
-            if (i->attach)
-                i->attach(i);
+            pa_sink_input_attach(i);
 
             if (i->thread_info.state != PA_SINK_INPUT_CORKED) {
                 pa_usec_t usec = 0;
@@ -2929,8 +2916,7 @@ void pa_sink_detach_within_thread(pa_sink *s) {
     pa_assert(PA_SINK_IS_LINKED(s->thread_info.state));
 
     PA_HASHMAP_FOREACH(i, s->thread_info.inputs, state)
-        if (i->detach)
-            i->detach(i);
+        pa_sink_input_detach(i);
 
     if (s->monitor_source)
         pa_source_detach_within_thread(s->monitor_source);
@@ -2946,8 +2932,7 @@ void pa_sink_attach_within_thread(pa_sink *s) {
     pa_assert(PA_SINK_IS_LINKED(s->thread_info.state));
 
     PA_HASHMAP_FOREACH(i, s->thread_info.inputs, state)
-        if (i->attach)
-            i->attach(i);
+        pa_sink_input_attach(i);
 
     if (s->monitor_source)
         pa_source_attach_within_thread(s->monitor_source);

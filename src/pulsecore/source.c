@@ -1943,7 +1943,7 @@ unsigned pa_source_used_by(pa_source *s) {
 }
 
 /* Called from main thread */
-unsigned pa_source_check_suspend(pa_source *s) {
+unsigned pa_source_check_suspend(pa_source *s, pa_source_output *ignore) {
     unsigned ret;
     pa_source_output *o;
     uint32_t idx;
@@ -1958,6 +1958,9 @@ unsigned pa_source_check_suspend(pa_source *s) {
 
     PA_IDXSET_FOREACH(o, s->outputs, idx) {
         pa_source_output_state_t st;
+
+        if (o == ignore)
+            continue;
 
         st = pa_source_output_get_state(o);
 
@@ -2031,11 +2034,7 @@ int pa_source_process_msg(pa_msgobject *object, int code, void *userdata, int64_
                 pa_hashmap_put(o->thread_info.direct_on_input->thread_info.direct_outputs, PA_UINT32_TO_PTR(o->index), o);
             }
 
-            pa_assert(!o->thread_info.attached);
-            o->thread_info.attached = true;
-
-            if (o->attach)
-                o->attach(o);
+            pa_source_output_attach(o);
 
             pa_source_output_set_state_within_thread(o, o->state);
 
@@ -2059,11 +2058,7 @@ int pa_source_process_msg(pa_msgobject *object, int code, void *userdata, int64_
 
             pa_source_output_set_state_within_thread(o, o->state);
 
-            if (o->detach)
-                o->detach(o);
-
-            pa_assert(o->thread_info.attached);
-            o->thread_info.attached = false;
+            pa_source_output_detach(o);
 
             if (o->thread_info.direct_on_input) {
                 pa_hashmap_remove(o->thread_info.direct_on_input->thread_info.direct_outputs, PA_UINT32_TO_PTR(o->index));
@@ -2286,8 +2281,7 @@ void pa_source_detach_within_thread(pa_source *s) {
     pa_assert(PA_SOURCE_IS_LINKED(s->thread_info.state));
 
     PA_HASHMAP_FOREACH(o, s->thread_info.outputs, state)
-        if (o->detach)
-            o->detach(o);
+        pa_source_output_detach(o);
 }
 
 /* Called from IO thread */
@@ -2300,8 +2294,7 @@ void pa_source_attach_within_thread(pa_source *s) {
     pa_assert(PA_SOURCE_IS_LINKED(s->thread_info.state));
 
     PA_HASHMAP_FOREACH(o, s->thread_info.outputs, state)
-        if (o->attach)
-            o->attach(o);
+        pa_source_output_attach(o);
 }
 
 /* Called from IO thread */
