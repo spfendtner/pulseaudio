@@ -1121,6 +1121,25 @@ char *pa_split_spaces(const char *c, const char **state) {
     return pa_xstrndup(current, l);
 }
 
+/* Similar to pa_split_spaces, except this returns a string in-place.
+   Returned string is generally not NULL-terminated.
+   See pa_split_in_place(). */
+const char *pa_split_spaces_in_place(const char *c, int *n, const char **state) {
+    const char *current = *state ? *state : c;
+    size_t l;
+
+    if (!*current || *c == 0)
+        return NULL;
+
+    current += strspn(current, WHITESPACE);
+    l = strcspn(current, WHITESPACE);
+
+    *state = current+l;
+
+    *n = l;
+    return current;
+}
+
 PA_STATIC_TLS_DECLARE(signame, pa_xfree);
 
 /* Return the name of an UNIX signal. Similar to Solaris sig2str() */
@@ -2981,21 +3000,38 @@ bool pa_in_system_mode(void) {
     return !!atoi(e);
 }
 
-/* Checks a whitespace-separated list of words in haystack for needle */
-bool pa_str_in_list_spaces(const char *haystack, const char *needle) {
+/* Checks a delimiters-separated list of words in haystack for needle */
+bool pa_str_in_list(const char *haystack, const char *delimiters, const char *needle) {
     char *s;
     const char *state = NULL;
 
     if (!haystack || !needle)
         return false;
 
-    while ((s = pa_split_spaces(haystack, &state))) {
+    while ((s = pa_split(haystack, delimiters, &state))) {
         if (pa_streq(needle, s)) {
             pa_xfree(s);
             return true;
         }
 
         pa_xfree(s);
+    }
+
+    return false;
+}
+
+/* Checks a whitespace-separated list of words in haystack for needle */
+bool pa_str_in_list_spaces(const char *haystack, const char *needle) {
+    const char *s;
+    int n;
+    const char *state = NULL;
+
+    if (!haystack || !needle)
+        return false;
+
+    while ((s = pa_split_spaces_in_place(haystack, &n, &state))) {
+        if (pa_strneq(needle, s, n))
+            return true;
     }
 
     return false;
